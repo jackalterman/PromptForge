@@ -34,6 +34,12 @@ export default function App() {
   // Modal State
   const [isSaveModalOpen, setIsSaveModalOpen] = useState(false);
 
+  // Resizing State
+  const [outputPanelWidth, setOutputPanelWidth] = useState(450);
+  const [isResizing, setIsResizing] = useState(false);
+  const resizingRef = useRef(false);
+  const [isLargeScreen, setIsLargeScreen] = useState(window.innerWidth >= 1024);
+
   // Initialize from LocalStorage
   useEffect(() => {
     const saved = localStorage.getItem('promptforge_custom_templates');
@@ -53,6 +59,52 @@ export default function App() {
       }
     }
   }, []);
+
+  // Handle window resize for responsive layout
+  useEffect(() => {
+    const handleResize = () => setIsLargeScreen(window.innerWidth >= 1024);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  // Resizing Logic
+  const startResizing = useCallback(() => {
+    setIsResizing(true);
+    resizingRef.current = true;
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+  }, []);
+
+  const stopResizing = useCallback(() => {
+    setIsResizing(false);
+    resizingRef.current = false;
+    document.body.style.cursor = '';
+    document.body.style.userSelect = '';
+  }, []);
+
+  const handleMouseMove = useCallback((e: MouseEvent) => {
+    if (!resizingRef.current) return;
+    
+    // Calculate new width: Window Width - Mouse X Position
+    const newWidth = window.innerWidth - e.clientX;
+    
+    // Constraints
+    const minWidth = 320;
+    const maxWidth = window.innerWidth - 350; // Keep at least 350px for the editor/sidebar
+    
+    if (newWidth >= minWidth && newWidth <= maxWidth) {
+      setOutputPanelWidth(newWidth);
+    }
+  }, []);
+
+  useEffect(() => {
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', stopResizing);
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', stopResizing);
+    };
+  }, [handleMouseMove, stopResizing]);
 
   // Save custom templates to LocalStorage
   const saveCustomTemplates = (updatedTemplates: PromptTemplate[]) => {
@@ -435,11 +487,37 @@ export default function App() {
           </div>
 
           {/* Right Panel (Output) */}
-          <div className={`${showOutputPanel ? 'block w-full lg:w-[450px]' : 'hidden'} lg:block w-[450px] border-l border-slate-800 bg-slate-900 relative transition-all duration-300`}>
+          <div 
+            className={`
+              ${showOutputPanel ? 'block' : 'hidden'} 
+              lg:block 
+              border-l border-slate-800 bg-slate-900 relative
+              ${isResizing ? '' : 'transition-[width] duration-300'}
+            `}
+            style={{ 
+              width: isLargeScreen ? outputPanelWidth : '100%',
+              minWidth: isLargeScreen ? 320 : 'auto'
+            }}
+          >
+             {/* Resize Handle (Desktop Only) */}
+             <div
+                className={`
+                  hidden lg:block absolute -left-1.5 top-0 bottom-0 w-3 cursor-col-resize z-50 
+                  transition-colors hover:bg-blue-500/20 active:bg-blue-500/40
+                  ${isResizing ? 'bg-blue-500/40' : ''}
+                `}
+                onMouseDown={startResizing}
+                title="Drag to resize"
+             >
+               {/* Visual indicator line in the center of the handle */}
+               <div className="absolute left-1.5 top-0 bottom-0 w-[1px] bg-slate-800" />
+             </div>
+
              {/* Close button for mobile/tablet view of output */}
              <div className="lg:hidden absolute top-3 right-3 z-20">
                <button onClick={() => setShowOutputPanel(false)} className="bg-slate-800 p-2 rounded-full text-white">X</button>
              </div>
+             
              <OutputPanel 
               messages={messages} 
               loading={isLoading} 
