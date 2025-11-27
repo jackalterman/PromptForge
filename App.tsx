@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Menu, Wand2, Play, Save, Settings2, Code, RotateCcw, Plus, Braces } from 'lucide-react';
+import { Menu, Wand2, Play, Save, Settings2, Code, RotateCcw } from 'lucide-react';
 import Sidebar from './components/Sidebar';
 import OutputPanel from './components/OutputPanel';
 import SaveModal from './components/SaveModal';
 import { INITIAL_TEMPLATES } from './constants';
-import { PromptTemplate, Variable, ModelType, GenerationResult } from './types';
-import { generateCompletion, optimizePrompt } from './services/geminiService';
+import { PromptTemplate, Variable, ModelType, ChatMessage } from './types';
+import { generateCompletion, optimizePrompt, createChatSession, sendChatMessage } from './services/geminiService';
+import { Chat } from '@google/genai';
 
 export default function App() {
   // State
@@ -20,9 +21,11 @@ export default function App() {
   
   // Refs
   const editorRef = useRef<HTMLTextAreaElement>(null);
+  // Chat Session Ref (persists across renders, cleared on new Run)
+  const chatSessionRef = useRef<Chat | null>(null);
   
   // Execution State
-  const [output, setOutput] = useState<GenerationResult | null>(null);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isOptimizing, setIsOptimizing] = useState(false);
   const [selectedModel, setSelectedModel] = useState<ModelType>(ModelType.FLASH);
@@ -113,7 +116,8 @@ export default function App() {
     setCurrentPrompt("");
     setSelectedTemplateId(null);
     setVariables([]);
-    setOutput(null);
+    setMessages([]);
+    chatSessionRef.current = null;
   };
 
   const handleDeleteTemplate = (id: string) => {
@@ -167,12 +171,7 @@ export default function App() {
     }
   };
 
-  const handleRun = async () => {
-    if (!currentPrompt.trim()) return;
-    setIsLoading(true);
-    setShowOutputPanel(true);
-    
-    // Interpolate variables
+  const getInterpolatedPrompt = () => {
     let finalPrompt = currentPrompt;
     variables.forEach(v => {
       // Escape special characters in variable names for regex
@@ -180,13 +179,85 @@ export default function App() {
       const regex = new RegExp(`\\{\\{\\s*${escapedName}\\s*\\}\\}`, 'g');
       finalPrompt = finalPrompt.replace(regex, v.value);
     });
+    return finalPrompt;
+  };
+
+  const handleRun = async () => {
+    if (!currentPrompt.trim()) return;
+    setIsLoading(true);
+    setShowOutputPanel(true);
+    setMessages([]); // Clear previous chat
+    
+    // 1. Interpolate variables
+    const finalPrompt = getInterpolatedPrompt();
+
+    // 2. Add User Message immediately
+    const userMsg: ChatMessage = {
+      id: Date.now().toString(),
+      role: 'user',
+      text: finalPrompt,
+      timestamp: Date.now()
+    };
+    setMessages([userMsg]);
 
     try {
-      const result = await generateCompletion(finalPrompt, selectedModel);
-      setOutput({...result, model: selectedModel});
+      // 3. Initialize Chat Session
+      chatSessionRef.current = createChatSession(selectedModel);
+      
+      // 4. Send Message
+      const result = await sendChatMessage(chatSessionRef.current, finalPrompt);
+      
+      // 5. Add Model Response
+      const modelMsg: ChatMessage = {
+        id: (Date.now() + 1).toString(),
+        role: 'model',
+        text: result.text,
+        timestamp: Date.now()
+      };
+      setMessages(prev => [...prev, modelMsg]);
+      
     } catch (e) {
       console.error(e);
-      setOutput({ text: "Error running prompt. Ensure API Key is set.", model: "error", duration: 0 });
+      setMessages(prev => [...prev, {
+        id: Date.now().toString(),
+        role: 'error',
+        text: "Error running prompt. Ensure API Key is set and model is available.",
+        timestamp: Date.now()
+      }]);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleChatSubmit = async (text: string) => {
+    if (!chatSessionRef.current || !text.trim()) return;
+    setIsLoading(true);
+
+    const userMsg: ChatMessage = {
+      id: Date.now().toString(),
+      role: 'user',
+      text: text,
+      timestamp: Date.now()
+    };
+    setMessages(prev => [...prev, userMsg]);
+
+    try {
+      const result = await sendChatMessage(chatSessionRef.current, text);
+      const modelMsg: ChatMessage = {
+        id: (Date.now() + 1).toString(),
+        role: 'model',
+        text: result.text,
+        timestamp: Date.now()
+      };
+      setMessages(prev => [...prev, modelMsg]);
+    } catch (e) {
+      console.error(e);
+      setMessages(prev => [...prev, {
+        id: Date.now().toString(),
+        role: 'error',
+        text: "Failed to send message.",
+        timestamp: Date.now()
+      }]);
     } finally {
       setIsLoading(false);
     }
@@ -198,35 +269,8 @@ export default function App() {
     variableCacheRef.current[name] = val;
   };
 
-  const handleInsertVariable = () => {
-    const name = prompt("Variable Name (e.g., 'context'):");
-    if (!name) return;
-    const tagName = name.trim();
-    const tag = `{{${tagName}}}`;
-    
-    if (editorRef.current) {
-      const start = editorRef.current.selectionStart;
-      const end = editorRef.current.selectionEnd;
-      const text = currentPrompt;
-      const newText = text.substring(0, start) + tag + text.substring(end);
-      setCurrentPrompt(newText);
-      
-      // Defer focus to allow React to re-render
-      setTimeout(() => {
-        editorRef.current?.focus();
-        const newPos = start + tag.length;
-        editorRef.current?.setSelectionRange(newPos, newPos);
-      }, 0);
-    } else {
-      setCurrentPrompt(prev => prev + tag);
-    }
-  };
-
   // Get current template details for modal pre-fill
   const activeTemplate = templates.find(t => t.id === selectedTemplateId);
-  const isCustomTemplate = selectedTemplateId?.startsWith('custom_');
-  
-  // Extract unique categories for the modal dropdown
   const existingCategories = Array.from(new Set(templates.map(t => t.category)));
 
   return (
@@ -286,20 +330,16 @@ export default function App() {
             
             {/* Editor Toolbar */}
             <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
-              <h2 className="text-lg font-semibold flex items-center gap-2 text-white">
-                <Code className="w-5 h-5 text-slate-500" />
-                Editor
-              </h2>
+              <div className="flex items-center gap-3">
+                <h2 className="text-lg font-semibold flex items-center gap-2 text-white">
+                  <Code className="w-5 h-5 text-slate-500" />
+                  Editor
+                </h2>
+                <span className="text-xs text-slate-500 hidden sm:inline-block">
+                  Type <span className="text-blue-400 font-mono">{`{{variable}}`}</span> to add dynamic fields.
+                </span>
+              </div>
               <div className="flex gap-2">
-                <button 
-                  onClick={handleInsertVariable}
-                  className="flex items-center gap-2 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-md text-sm transition-all border border-slate-700"
-                  title="Insert a variable at cursor position"
-                >
-                  <Braces className="w-4 h-4 text-blue-400" />
-                  <span className="hidden sm:inline">Add Var</span>
-                </button>
-
                 <button 
                   onClick={handleOptimize}
                   disabled={isOptimizing || !currentPrompt}
@@ -400,7 +440,11 @@ export default function App() {
              <div className="lg:hidden absolute top-3 right-3 z-20">
                <button onClick={() => setShowOutputPanel(false)} className="bg-slate-800 p-2 rounded-full text-white">X</button>
              </div>
-             <OutputPanel result={output} loading={isLoading} />
+             <OutputPanel 
+              messages={messages} 
+              loading={isLoading} 
+              onSendMessage={handleChatSubmit} 
+            />
           </div>
         </div>
       </main>

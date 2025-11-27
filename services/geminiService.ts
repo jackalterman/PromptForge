@@ -1,10 +1,65 @@
-import { GoogleGenAI, GenerateContentResponse } from "@google/genai";
+import { GoogleGenAI, GenerateContentResponse, Chat } from "@google/genai";
 import { ModelType } from '../types';
 
 // Initialize the API client
 // The API key must be obtained exclusively from the environment variable process.env.API_KEY.
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
+/**
+ * Creates a new chat session with the specified model.
+ */
+export const createChatSession = (modelType: ModelType): Chat => {
+  let modelName = 'gemini-2.5-flash';
+  let config: any = undefined;
+
+  if (modelType === ModelType.PRO) {
+    modelName = 'gemini-3-pro-preview';
+  } else if (modelType === ModelType.THINKING_PRO) {
+    modelName = 'gemini-3-pro-preview';
+    config = {
+      thinkingConfig: { thinkingBudget: 4096 } // Budget for reasoning
+    };
+  }
+
+  return ai.chats.create({
+    model: modelName,
+    config: config
+  });
+};
+
+/**
+ * Sends a message to an existing chat session.
+ */
+export const sendChatMessage = async (
+  chat: Chat, 
+  message: string
+): Promise<{ text: string; duration: number }> => {
+  const startTime = performance.now();
+  
+  try {
+    // strict adherence: sendMessage only accepts { message: string } or string? 
+    // The SDK types say sendMessage(message: string | ...).
+    // Based on guidelines: chat.sendMessage({ message: "..." }) is correct.
+    const response: GenerateContentResponse = await chat.sendMessage({ 
+      message: message 
+    });
+
+    const endTime = performance.now();
+    const text = response.text || "No text generated.";
+
+    return {
+      text,
+      duration: endTime - startTime
+    };
+  } catch (error: any) {
+    console.error("Gemini Chat Error:", error);
+    throw new Error(error.message || "Failed to send message.");
+  }
+};
+
+/**
+ * Legacy single-shot generation (kept for optimization or simple tasks if needed)
+ */
 export const generateCompletion = async (
   prompt: string,
   modelType: ModelType
@@ -17,10 +72,8 @@ export const generateCompletion = async (
     modelName = 'gemini-3-pro-preview';
   } else if (modelType === ModelType.THINKING_PRO) {
     modelName = 'gemini-3-pro-preview';
-    // Thinking config is allowed for 3.0 Pro Preview in this context as per examples,
-    // though guidelines mention 2.5 series. We follow the specific Thinking Budget example.
     config = {
-      thinkingConfig: { thinkingBudget: 4096 } // Budget for reasoning
+      thinkingConfig: { thinkingBudget: 4096 }
     };
   }
 
@@ -32,8 +85,6 @@ export const generateCompletion = async (
     });
 
     const endTime = performance.now();
-    
-    // The GenerateContentResponse object features a text property (not a method).
     const text = response.text || "No text generated.";
 
     return {

@@ -18,6 +18,13 @@ export interface OptimizationResult {
   reasoning: string;
 }
 
+export interface ChatMessage {
+  id: string;
+  role: 'user' | 'model' | 'system' | 'error';
+  text: string;
+  timestamp: number;
+}
+
 export interface GenerationResult {
   text: string;
   model: string;
