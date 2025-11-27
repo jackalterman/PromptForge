@@ -1,0 +1,5 @@
+{
+  "name": "PromptForge AI",
+  "description": "An advanced prompt engineering environment for crafting, testing, and optimizing LLM prompts with template management and real-time AI feedback.",
+  "requestFramePermissions": []
+}
