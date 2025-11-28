@@ -107,8 +107,8 @@ export default function OutputPanel({ messages, loading, onSendMessage }: Output
                 {msg.text}
               </div>
               
-              {/* Message Actions */}
-              <div className={`absolute top-2 ${msg.role === 'user' ? '-left-10' : '-right-10'} opacity-0 group-hover:opacity-100 transition-opacity`}>
+              {/* Message Actions - Moved to bottom-2 */}
+              <div className={`absolute bottom-2 ${msg.role === 'user' ? '-left-10' : '-right-10'} opacity-0 group-hover:opacity-100 transition-opacity`}>
                 <button
                   onClick={() => handleCopy(msg.text, msg.id)}
                   className="p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-400 rounded-md border border-slate-700 shadow-sm"

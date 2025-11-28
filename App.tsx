@@ -258,11 +258,11 @@ export default function App() {
     }
   };
 
-  const handleOpenChatGPT = async () => {
+  const handleOpenExternal = async (url: string) => {
     const text = getInterpolatedPrompt();
     try {
       await navigator.clipboard.writeText(text);
-      window.open('https://chatgpt.com/', '_blank');
+      window.open(url, '_blank');
       setIsActionsMenuOpen(false);
     } catch (err) {
       console.error('Failed to copy text: ', err);
@@ -503,50 +503,71 @@ export default function App() {
             )}
 
             {/* Run Bar (Mobile/Desktop) */}
-            <div className="mt-6 flex justify-end gap-3">
-               {/* Actions Dropdown */}
-               <div className="relative" ref={actionsMenuRef}>
-                 <button
-                   onClick={() => setIsActionsMenuOpen(!isActionsMenuOpen)}
-                   className="flex items-center gap-2 bg-slate-800 hover:bg-slate-700 text-slate-300 py-2.5 px-4 rounded-lg font-medium transition-colors border border-slate-700"
-                 >
-                   Actions
-                   <ChevronDown className="w-4 h-4" />
-                 </button>
+            <div className="mt-6 flex justify-end gap-3 relative">
+               <div className="relative z-20" ref={actionsMenuRef}>
+                 <div className="flex rounded-lg shadow-lg shadow-indigo-900/20 isolate">
+                  <button 
+                    onClick={handleRun}
+                    disabled={isLoading || !currentPrompt}
+                    className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white py-2.5 pl-6 pr-4 rounded-l-lg font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed border-r border-indigo-500/30"
+                  >
+                    <Play className={`w-4 h-4 ${isLoading ? 'hidden' : 'block'} fill-current`} />
+                    {isLoading ? (
+                      <>
+                        <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></span>
+                        Running
+                      </>
+                    ) : 'Run Prompt'}
+                  </button>
+                  <button
+                    onClick={() => setIsActionsMenuOpen(!isActionsMenuOpen)}
+                    disabled={isLoading || !currentPrompt}
+                    className="bg-indigo-600 hover:bg-indigo-500 text-white py-2.5 px-3 rounded-r-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <ChevronDown className={`w-4 h-4 transition-transform ${isActionsMenuOpen ? 'rotate-180' : ''}`} />
+                  </button>
+                </div>
                  
                  {isActionsMenuOpen && (
-                   <div className="absolute bottom-full right-0 mb-2 w-72 bg-slate-800 border border-slate-700 rounded-xl shadow-xl overflow-hidden z-20 flex flex-col">
+                   <div className="absolute bottom-full right-0 mb-2 w-72 bg-slate-800 border border-slate-700 rounded-xl shadow-xl overflow-hidden flex flex-col divide-y divide-slate-700/50 animate-in fade-in zoom-in-95 duration-100">
                      <button 
                        onClick={handleCopyFilledPrompt}
-                       className="flex items-center gap-3 px-4 py-3 text-sm text-slate-300 hover:bg-slate-700 hover:text-white text-left transition-colors border-b border-slate-700/50"
-                     >
-                       <Copy className="w-4 h-4 text-blue-400" />
-                       Copy Filled Prompt
-                     </button>
-                     <button 
-                       onClick={handleOpenChatGPT}
                        className="flex items-center gap-3 px-4 py-3 text-sm text-slate-300 hover:bg-slate-700 hover:text-white text-left transition-colors"
                      >
-                       <ExternalLink className="w-4 h-4 text-green-400" />
-                       Run in ChatGPT (Copy & Open)
+                       <Copy className="w-4 h-4 text-slate-400" />
+                       Copy Filled Prompt
                      </button>
+                     
+                     <div>
+                       <div className="px-4 py-2 text-xs font-semibold text-slate-500 uppercase tracking-wider bg-slate-800/50">
+                         Run in External App
+                       </div>
+
+                       <button 
+                         onClick={() => handleOpenExternal('https://chatgpt.com/')}
+                         className="w-full flex items-center gap-3 px-4 py-3 text-sm text-slate-300 hover:bg-slate-700 hover:text-white text-left transition-colors"
+                       >
+                         <ExternalLink className="w-4 h-4 text-green-400" />
+                         ChatGPT
+                       </button>
+                       <button 
+                         onClick={() => handleOpenExternal('https://claude.ai/')}
+                         className="w-full flex items-center gap-3 px-4 py-3 text-sm text-slate-300 hover:bg-slate-700 hover:text-white text-left transition-colors"
+                       >
+                         <ExternalLink className="w-4 h-4 text-orange-400" />
+                         Claude
+                       </button>
+                       <button 
+                         onClick={() => handleOpenExternal('https://gemini.google.com/')}
+                         className="w-full flex items-center gap-3 px-4 py-3 text-sm text-slate-300 hover:bg-slate-700 hover:text-white text-left transition-colors"
+                       >
+                         <ExternalLink className="w-4 h-4 text-blue-400" />
+                         Gemini Web
+                       </button>
+                     </div>
                    </div>
                  )}
                </div>
-
-               <button 
-                onClick={handleRun}
-                disabled={isLoading || !currentPrompt}
-                className="flex items-center gap-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white py-2.5 px-6 rounded-lg font-medium shadow-lg shadow-indigo-900/30 transition-all transform active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                <Play className={`w-4 h-4 ${isLoading ? 'hidden' : 'block'} fill-current`} />
-                {isLoading ? (
-                  <>
-                    <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></span>
-                    Running...
-                  </>
-                ) : 'Run Prompt'}
-              </button>
             </div>
 
           </div>
