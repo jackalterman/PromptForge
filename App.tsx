@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Menu, Wand2, Play, Save, Settings2, Code, RotateCcw } from 'lucide-react';
+import { Menu, Wand2, Play, Save, Settings2, Code, RotateCcw, ChevronDown, Copy, ExternalLink } from 'lucide-react';
 import Sidebar from './components/Sidebar';
 import OutputPanel from './components/OutputPanel';
 import SaveModal from './components/SaveModal';
@@ -21,8 +21,8 @@ export default function App() {
   
   // Refs
   const editorRef = useRef<HTMLTextAreaElement>(null);
-  // Chat Session Ref (persists across renders, cleared on new Run)
   const chatSessionRef = useRef<Chat | null>(null);
+  const actionsMenuRef = useRef<HTMLDivElement>(null);
   
   // Execution State
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -33,6 +33,7 @@ export default function App() {
   
   // Modal State
   const [isSaveModalOpen, setIsSaveModalOpen] = useState(false);
+  const [isActionsMenuOpen, setIsActionsMenuOpen] = useState(false);
 
   // Resizing State
   const [outputPanelWidth, setOutputPanelWidth] = useState(450);
@@ -65,6 +66,19 @@ export default function App() {
     const handleResize = () => setIsLargeScreen(window.innerWidth >= 1024);
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  // Close actions menu on click outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (actionsMenuRef.current && !actionsMenuRef.current.contains(event.target as Node)) {
+        setIsActionsMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
   }, []);
 
   // Resizing Logic
@@ -234,6 +248,27 @@ export default function App() {
     return finalPrompt;
   };
 
+  const handleCopyFilledPrompt = async () => {
+    const text = getInterpolatedPrompt();
+    try {
+      await navigator.clipboard.writeText(text);
+      setIsActionsMenuOpen(false);
+    } catch (err) {
+      console.error('Failed to copy text: ', err);
+    }
+  };
+
+  const handleOpenChatGPT = async () => {
+    const text = getInterpolatedPrompt();
+    try {
+      await navigator.clipboard.writeText(text);
+      window.open('https://chatgpt.com/', '_blank');
+      setIsActionsMenuOpen(false);
+    } catch (err) {
+      console.error('Failed to copy text: ', err);
+    }
+  };
+
   const handleRun = async () => {
     if (!currentPrompt.trim()) return;
     setIsLoading(true);
@@ -323,7 +358,7 @@ export default function App() {
 
   // Get current template details for modal pre-fill
   const activeTemplate = templates.find(t => t.id === selectedTemplateId);
-  const existingCategories = Array.from(new Set(templates.map(t => t.category)));
+  const existingCategories: string[] = Array.from(new Set(templates.map(t => t.category)));
 
   return (
     <div className="flex h-screen overflow-hidden bg-slate-950 text-slate-200 font-sans">
@@ -468,7 +503,37 @@ export default function App() {
             )}
 
             {/* Run Bar (Mobile/Desktop) */}
-            <div className="mt-6 flex justify-end">
+            <div className="mt-6 flex justify-end gap-3">
+               {/* Actions Dropdown */}
+               <div className="relative" ref={actionsMenuRef}>
+                 <button
+                   onClick={() => setIsActionsMenuOpen(!isActionsMenuOpen)}
+                   className="flex items-center gap-2 bg-slate-800 hover:bg-slate-700 text-slate-300 py-2.5 px-4 rounded-lg font-medium transition-colors border border-slate-700"
+                 >
+                   Actions
+                   <ChevronDown className="w-4 h-4" />
+                 </button>
+                 
+                 {isActionsMenuOpen && (
+                   <div className="absolute bottom-full right-0 mb-2 w-72 bg-slate-800 border border-slate-700 rounded-xl shadow-xl overflow-hidden z-20 flex flex-col">
+                     <button 
+                       onClick={handleCopyFilledPrompt}
+                       className="flex items-center gap-3 px-4 py-3 text-sm text-slate-300 hover:bg-slate-700 hover:text-white text-left transition-colors border-b border-slate-700/50"
+                     >
+                       <Copy className="w-4 h-4 text-blue-400" />
+                       Copy Filled Prompt
+                     </button>
+                     <button 
+                       onClick={handleOpenChatGPT}
+                       className="flex items-center gap-3 px-4 py-3 text-sm text-slate-300 hover:bg-slate-700 hover:text-white text-left transition-colors"
+                     >
+                       <ExternalLink className="w-4 h-4 text-green-400" />
+                       Run in ChatGPT (Copy & Open)
+                     </button>
+                   </div>
+                 )}
+               </div>
+
                <button 
                 onClick={handleRun}
                 disabled={isLoading || !currentPrompt}
